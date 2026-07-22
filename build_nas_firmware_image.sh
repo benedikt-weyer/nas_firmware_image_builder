@@ -119,6 +119,15 @@ require_file() {
     die "Required file not found: $1"
 }
 
+run_in_target() {
+  chroot "$ROOT_MOUNT" /usr/bin/env \
+    -i \
+    "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin" \
+    HOME=/root \
+    DEBIAN_FRONTEND=noninteractive \
+    "$@"
+}
+
 show_setting() {
   printf '  %-24s %s\n' "$1" "$2"
 }
@@ -643,21 +652,18 @@ EOF
 
 log "Installing target firmware and utilities"
 
-chroot "$ROOT_MOUNT" /usr/bin/env \
-  DEBIAN_FRONTEND=noninteractive \
+run_in_target \
   apt-get update
 
-chroot "$ROOT_MOUNT" /usr/bin/env \
-  DEBIAN_FRONTEND=noninteractive \
+run_in_target \
   apt-get install -y \
     firmware-realtek \
     firmware-linux-free
 
-chroot "$ROOT_MOUNT" /usr/bin/env \
-  DEBIAN_FRONTEND=noninteractive \
+run_in_target \
   locale-gen
 
-chroot "$ROOT_MOUNT" \
+run_in_target \
   update-locale LANG="$LOCALE"
 
 ln -sfn \
@@ -670,7 +676,7 @@ ln -sfn \
 
 log "Creating initial user: $DEFAULT_USER"
 
-chroot "$ROOT_MOUNT" \
+run_in_target \
   useradd \
     --create-home \
     --shell /bin/bash \
@@ -678,14 +684,14 @@ chroot "$ROOT_MOUNT" \
     "$DEFAULT_USER"
 
 printf '%s:%s\n' "$DEFAULT_USER" "$INITIAL_PASSWORD" |
-  chroot "$ROOT_MOUNT" chpasswd
+  run_in_target chpasswd
 
 # Force password change on the first successful login.
-chroot "$ROOT_MOUNT" \
+run_in_target \
   chage -d 0 "$DEFAULT_USER"
 
 # Disable direct root-password login.
-chroot "$ROOT_MOUNT" \
+run_in_target \
   passwd -l root
 
 if [[ -n "$AUTHORIZED_KEYS_FILE" ]]; then
@@ -760,7 +766,7 @@ KERNEL_RELEASE="${KERNEL_RELEASES[${#KERNEL_RELEASES[@]} - 1]}"
 
 show_setting "Kernel release:" "$KERNEL_RELEASE"
 
-chroot "$ROOT_MOUNT" \
+run_in_target \
   depmod "$KERNEL_RELEASE"
 
 ###############################################################################
@@ -832,13 +838,13 @@ EOF
 
 log "Enabling target services"
 
-chroot "$ROOT_MOUNT" \
+run_in_target \
   systemctl enable ssh.service
 
-chroot "$ROOT_MOUNT" \
+run_in_target \
   systemctl enable systemd-timesyncd.service
 
-chroot "$ROOT_MOUNT" \
+run_in_target \
   systemctl enable serial-getty@"${SERIAL_CONSOLE%%,*}".service
 
 ###############################################################################
@@ -847,7 +853,7 @@ chroot "$ROOT_MOUNT" \
 
 log "Cleaning target filesystem"
 
-chroot "$ROOT_MOUNT" \
+run_in_target \
   apt-get clean
 
 rm -rf \
