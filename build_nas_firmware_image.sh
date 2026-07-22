@@ -30,6 +30,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(cd -- "$SCRIPT_DIR" && pwd)"
+SCRIPT_PATH="$SCRIPT_DIR/$(basename -- "${BASH_SOURCE[0]}")"
 
 UBOOT_OUTPUT_DIR="${UBOOT_OUTPUT_DIR:-$PROJECT_DIR/nas_uboot_builder/output}"
 KERNEL_OUTPUT_DIR="${KERNEL_OUTPUT_DIR:-$PROJECT_DIR/nas_kernel_builder/kernel-output}"
@@ -168,34 +169,60 @@ trap cleanup EXIT INT TERM
 # Privilege handling
 ###############################################################################
 
+reexec_as_root() {
+  local -a env_args root_cmd
+
+  env_args=(
+    env
+    "PATH=$PATH"
+    "UBOOT_OUTPUT_DIR=$UBOOT_OUTPUT_DIR"
+    "KERNEL_OUTPUT_DIR=$KERNEL_OUTPUT_DIR"
+    "OUTPUT_DIR=$OUTPUT_DIR"
+    "WORK_DIR=$WORK_DIR"
+    "IMAGE_NAME=$IMAGE_NAME"
+    "UBOOT_IMAGE=$UBOOT_IMAGE"
+    "KERNEL_IMAGE=$KERNEL_IMAGE"
+    "DTB_IMAGE=$DTB_IMAGE"
+    "DEBIAN_SUITE=$DEBIAN_SUITE"
+    "DEBIAN_MIRROR=$DEBIAN_MIRROR"
+    "DEBIAN_ARCH=$DEBIAN_ARCH"
+    "IMAGE_SIZE=$IMAGE_SIZE"
+    "BOOT_SIZE=$BOOT_SIZE"
+    "HOSTNAME=$HOSTNAME"
+    "DEFAULT_USER=$DEFAULT_USER"
+    "INITIAL_PASSWORD=$INITIAL_PASSWORD"
+    "AUTHORIZED_KEYS_FILE=$AUTHORIZED_KEYS_FILE"
+    "TIMEZONE=$TIMEZONE"
+    "LOCALE=$LOCALE"
+    "SERIAL_CONSOLE=$SERIAL_CONSOLE"
+    "KERNEL_EXTRA_ARGS=$KERNEL_EXTRA_ARGS"
+    "$SCRIPT_PATH"
+    "$@"
+  )
+
+  if command -v sudo >/dev/null 2>&1; then
+    root_cmd=(sudo --preserve-env)
+    if "${root_cmd[@]}" true >/dev/null 2>&1; then
+      exec "${root_cmd[@]}" "${env_args[@]}"
+    fi
+    warn "sudo is installed but unusable in this environment; trying another root helper"
+  fi
+
+  if command -v doas >/dev/null 2>&1; then
+    exec doas "${env_args[@]}"
+  fi
+
+  if command -v pkexec >/dev/null 2>&1; then
+    exec pkexec "${env_args[@]}"
+  fi
+
+  die \
+    "Root privileges are required, but no working escalation tool was found. Re-run this script as root."
+}
+
 if [[ "$EUID" -ne 0 ]]; then
   log "Requesting root privileges"
-
-  exec sudo --preserve-env \
-    env \
-      PATH="$PATH" \
-      UBOOT_OUTPUT_DIR="$UBOOT_OUTPUT_DIR" \
-      KERNEL_OUTPUT_DIR="$KERNEL_OUTPUT_DIR" \
-      OUTPUT_DIR="$OUTPUT_DIR" \
-      WORK_DIR="$WORK_DIR" \
-      IMAGE_NAME="$IMAGE_NAME" \
-      UBOOT_IMAGE="$UBOOT_IMAGE" \
-      KERNEL_IMAGE="$KERNEL_IMAGE" \
-      DTB_IMAGE="$DTB_IMAGE" \
-      DEBIAN_SUITE="$DEBIAN_SUITE" \
-      DEBIAN_MIRROR="$DEBIAN_MIRROR" \
-      DEBIAN_ARCH="$DEBIAN_ARCH" \
-      IMAGE_SIZE="$IMAGE_SIZE" \
-      BOOT_SIZE="$BOOT_SIZE" \
-      HOSTNAME="$HOSTNAME" \
-      DEFAULT_USER="$DEFAULT_USER" \
-      INITIAL_PASSWORD="$INITIAL_PASSWORD" \
-      AUTHORIZED_KEYS_FILE="$AUTHORIZED_KEYS_FILE" \
-      TIMEZONE="$TIMEZONE" \
-      LOCALE="$LOCALE" \
-      SERIAL_CONSOLE="$SERIAL_CONSOLE" \
-      KERNEL_EXTRA_ARGS="$KERNEL_EXTRA_ARGS" \
-      "$0" "$@"
+  reexec_as_root "$@"
 fi
 
 ###############################################################################
