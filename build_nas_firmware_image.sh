@@ -128,6 +128,47 @@ run_in_target() {
     "$@"
 }
 
+repair_target_statoverrides() {
+  local statoverride_file replacement_file owner group mode path
+  local changed=false
+
+  statoverride_file="$ROOT_MOUNT/var/lib/dpkg/statoverride"
+
+  [[ -f "$statoverride_file" ]] || return
+
+  replacement_file="$(mktemp "${statoverride_file}.XXXXXX")"
+
+  while read -r owner group mode path; do
+    [[ -n "$group" && -n "$path" ]] || continue
+
+    # Debian Bookworm's cron package can leave this override behind even
+    # though the corresponding system group is unusable in the target.
+    if [[ "$group" == "crontab" && "$path" == "/usr/bin/crontab" ]]; then
+      warn "Removing broken dpkg statoverride for crontab: $path"
+      changed=true
+      continue
+    fi
+
+    if ! awk -F: -v target_group="$group" \
+      '$1 == target_group { found = 1 } END { exit !found }' \
+      "$ROOT_MOUNT/etc/group"; then
+      warn "Removing stale dpkg statoverride for missing target group $group: $path"
+      changed=true
+      continue
+    fi
+
+    printf '%s %s %s %s\n' "$owner" "$group" "$mode" "$path" >> "$replacement_file"
+  done < "$statoverride_file"
+
+  if [[ "$changed" == true ]]; then
+    chmod --reference="$statoverride_file" "$replacement_file"
+    chown --reference="$statoverride_file" "$replacement_file"
+    mv -f "$replacement_file" "$statoverride_file"
+  else
+    rm -f "$replacement_file"
+  fi
+}
+
 show_setting() {
   printf '  %-24s %s\n' "$1" "$2"
 }
@@ -651,6 +692,8 @@ EOF
 ###############################################################################
 
 log "Installing target firmware and utilities"
+
+repair_target_statoverrides
 
 run_in_target \
   apt-get update
