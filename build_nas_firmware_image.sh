@@ -305,7 +305,19 @@ if [[ "$CROSS_ARCH_BUILD" == true ]]; then
     die "binfmt_misc is not mounted"
   fi
 
-  if [[ ! -e /proc/sys/fs/binfmt_misc/qemu-aarch64 ]]; then
+  AARCH64_BINFMT=""
+
+  for registration in aarch64-linux qemu-aarch64; do
+    registration_path="/proc/sys/fs/binfmt_misc/$registration"
+
+    if [[ -r "$registration_path" ]] &&
+      grep -qx 'enabled' "$registration_path"; then
+      AARCH64_BINFMT="$registration"
+      break
+    fi
+  done
+
+  if [[ -z "$AARCH64_BINFMT" ]]; then
     cat >&2 <<'EOF'
 Error: AArch64 binfmt emulation is not enabled.
 
@@ -340,6 +352,10 @@ show_setting "Debian mirror:" "$DEBIAN_MIRROR"
 show_setting "Hostname:" "$HOSTNAME"
 show_setting "Default user:" "$DEFAULT_USER"
 show_setting "Build-host arch:" "$HOST_ARCH"
+
+if [[ "$CROSS_ARCH_BUILD" == true ]]; then
+  show_setting "AArch64 binfmt:" "$AARCH64_BINFMT"
+fi
 
 ###############################################################################
 # Ensure U-Boot fits before the first partition
