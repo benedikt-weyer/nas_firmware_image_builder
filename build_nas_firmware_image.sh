@@ -727,7 +727,7 @@ run_in_target \
     "$DEFAULT_USER"
 
 printf '%s:%s\n' "$DEFAULT_USER" "$INITIAL_PASSWORD" |
-  run_in_target chpasswd
+  run_in_target chpasswd --crypt-method SHA512
 
 # Force password change on the first successful login.
 run_in_target \
