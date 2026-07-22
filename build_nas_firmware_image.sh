@@ -809,8 +809,9 @@ KERNEL_RELEASE="${KERNEL_RELEASES[${#KERNEL_RELEASES[@]} - 1]}"
 
 show_setting "Kernel release:" "$KERNEL_RELEASE"
 
-run_in_target \
-  depmod "$KERNEL_RELEASE"
+# The kernel builder's modules_install output already includes depmod indexes.
+# Avoid executing the target depmod binary through binfmt emulation here.
+require_file "$MODULES_DIRECTORY/$KERNEL_RELEASE/modules.dep"
 
 ###############################################################################
 # Install kernel and device tree on the boot partition
@@ -881,14 +882,12 @@ EOF
 
 log "Enabling target services"
 
-run_in_target \
-  systemctl enable ssh.service
+systemctl --root="$ROOT_MOUNT" enable ssh.service
 
-run_in_target \
-  systemctl enable systemd-timesyncd.service
+systemctl --root="$ROOT_MOUNT" enable systemd-timesyncd.service
 
-run_in_target \
-  systemctl enable serial-getty@"${SERIAL_CONSOLE%%,*}".service
+systemctl --root="$ROOT_MOUNT" \
+  enable serial-getty@"${SERIAL_CONSOLE%%,*}".service
 
 ###############################################################################
 # Clean the root filesystem
@@ -896,8 +895,11 @@ run_in_target \
 
 log "Cleaning target filesystem"
 
-run_in_target \
-  apt-get clean
+rm -f \
+  "$ROOT_MOUNT/var/cache/apt/archives/"*.deb \
+  "$ROOT_MOUNT/var/cache/apt/archives/partial/"* \
+  "$ROOT_MOUNT/var/cache/apt/pkgcache.bin" \
+  "$ROOT_MOUNT/var/cache/apt/srcpkgcache.bin"
 
 rm -rf \
   "$ROOT_MOUNT/var/lib/apt/lists/"* \
