@@ -1,0 +1,9 @@
+nas_kernel_builder/linux
+nas_kernel_builder/kernel-*
+
+nas_uboot_builder/u-boot
+nas_uboot_builder/trusted-firmware-a
+nas_uboot_builder/rkbin
+nas_uboot_builder/output
+
+.direnv
