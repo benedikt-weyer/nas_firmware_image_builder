@@ -29,7 +29,7 @@ set -euo pipefail
 ###############################################################################
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_DIR="$(cd -- "$SCRIPT_DIR/.." && pwd)"
+PROJECT_DIR="$(cd -- "$SCRIPT_DIR" && pwd)"
 
 UBOOT_OUTPUT_DIR="${UBOOT_OUTPUT_DIR:-$PROJECT_DIR/nas_uboot_builder/output}"
 KERNEL_OUTPUT_DIR="${KERNEL_OUTPUT_DIR:-$PROJECT_DIR/nas_kernel_builder/kernel-output}"
