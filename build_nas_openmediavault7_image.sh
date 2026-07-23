@@ -98,11 +98,25 @@ cleanup() {
 trap cleanup EXIT INT TERM
 
 reexec_as_root() {
-  if command -v sudo >/dev/null 2>&1 && sudo true >/dev/null 2>&1; then
-    exec sudo --preserve-env env PATH="$PATH" OUTPUT_DIR="$OUTPUT_DIR" \
-      WORK_DIR="$WORK_DIR" SOURCE_IMAGE="$SOURCE_IMAGE" IMAGE_NAME="$IMAGE_NAME" \
-      OMV_ADMIN_USER="$OMV_ADMIN_USER" OMV_REPOSITORY="$OMV_REPOSITORY" \
-      "$SCRIPT_PATH" "$@"
+  local sudo_error
+
+  if command -v sudo >/dev/null 2>&1; then
+    # Do not use `sudo true` here: it would prompt once, then prompt again for
+    # the actual re-exec. `-n` lets us detect the broken Nix sudo wrapper
+    # without authenticating. A normal "password required" result is usable.
+    sudo_error="$(sudo -n true 2>&1)" || true
+
+    case "$sudo_error" in
+      *"must be owned by uid 0 and have the setuid bit set"* | \
+      *"effective uid is not 0"*)
+        ;;
+      *)
+        exec sudo --preserve-env env PATH="$PATH" OUTPUT_DIR="$OUTPUT_DIR" \
+          WORK_DIR="$WORK_DIR" SOURCE_IMAGE="$SOURCE_IMAGE" IMAGE_NAME="$IMAGE_NAME" \
+          OMV_ADMIN_USER="$OMV_ADMIN_USER" OMV_REPOSITORY="$OMV_REPOSITORY" \
+          "$SCRIPT_PATH" "$@"
+        ;;
+    esac
   fi
 
   if command -v doas >/dev/null 2>&1; then
