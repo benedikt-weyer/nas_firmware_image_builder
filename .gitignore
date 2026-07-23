@@ -9,6 +9,4 @@ nas_uboot_builder/output/
 .direnv/
 
 output/
-work/
-work-nixos/
-work-openmediavault7/
+work*/
