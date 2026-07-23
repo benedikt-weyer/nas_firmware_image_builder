@@ -19,6 +19,7 @@ OMV_REPOSITORY="${OMV_REPOSITORY:-https://packages.openmediavault.org/public}"
 
 LOOP_DEVICE=""
 ROOT_MOUNT="$WORK_DIR/root"
+UDEV_RULE_PATH="/run/udev/rules.d/99-nas-image-builder-loop-devices.rules"
 
 log() {
   printf '\n==> %s\n' "$*"
@@ -67,6 +68,21 @@ ensure_target_user() {
   fi
 }
 
+disable_loop_automount() {
+  mkdir -p "$(dirname -- "$UDEV_RULE_PATH")"
+  cat > "$UDEV_RULE_PATH" <<'EOF'
+# The image builder owns its loop devices and mounts them directly. Keep
+# desktop UDisks automounters from mounting loopXp1 behind its back.
+SUBSYSTEM=="block", KERNEL=="loop[0-9]*", ENV{UDISKS_IGNORE}="1", ENV{UDISKS_AUTO}="0"
+EOF
+  udevadm control --reload-rules
+}
+
+enable_loop_automount() {
+  rm -f "$UDEV_RULE_PATH"
+  udevadm control --reload-rules
+}
+
 unmount_image() {
   set +e
 
@@ -86,6 +102,7 @@ unmount_image() {
     losetup -d "$LOOP_DEVICE"
   fi
 
+  enable_loop_automount
 }
 
 cleanup() {
@@ -184,6 +201,7 @@ cp --reflink=auto --sparse=always "$SOURCE_IMAGE" "$IMAGE_PATH"
 
 log "Mounting copied root filesystem"
 
+disable_loop_automount
 LOOP_DEVICE="$(losetup --find --show --partscan "$IMAGE_PATH")"
 partprobe "$LOOP_DEVICE"
 udevadm settle
@@ -209,8 +227,11 @@ mount --bind /dev "$ROOT_MOUNT/dev"
 mount --bind /dev/pts "$ROOT_MOUNT/dev/pts"
 mount -t proc proc "$ROOT_MOUNT/proc"
 mount -t sysfs sysfs "$ROOT_MOUNT/sys"
-mount --bind /run "$ROOT_MOUNT/run"
-mount --make-rslave "$ROOT_MOUNT/run"
+# Do not bind the host /run. In particular, libnss-systemd would then query
+# the host user database, making accounts in the image invisible to dpkg
+# maintainer scripts. A private runtime directory is sufficient for chrooted
+# package installation.
+mount -t tmpfs -o mode=0755,nosuid,nodev tmpfs "$ROOT_MOUNT/run"
 
 rm -f "$ROOT_MOUNT/etc/resolv.conf"
 cp -L /etc/resolv.conf "$ROOT_MOUNT/etc/resolv.conf"
