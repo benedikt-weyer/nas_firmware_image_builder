@@ -16,6 +16,7 @@ IMAGE_PATH="$OUTPUT_DIR/$IMAGE_NAME"
 
 OMV_ADMIN_USER="${OMV_ADMIN_USER:-nas}"
 OMV_REPOSITORY="${OMV_REPOSITORY:-https://packages.openmediavault.org/public}"
+DNS_SERVERS="${DNS_SERVERS:-}"
 
 LOOP_DEVICE=""
 ROOT_MOUNT="$WORK_DIR/root"
@@ -33,6 +34,38 @@ die() {
 require_tool() {
   command -v "$1" >/dev/null 2>&1 ||
     die "Missing required tool: $1"
+}
+
+configure_target_resolver() {
+  local resolver_source=""
+  local candidate
+
+  rm -f "$ROOT_MOUNT/etc/resolv.conf"
+
+  if [[ -n "$DNS_SERVERS" ]]; then
+    for candidate in $DNS_SERVERS; do
+      printf 'nameserver %s\n' "$candidate"
+    done > "$ROOT_MOUNT/etc/resolv.conf"
+    return
+  fi
+
+  for candidate in \
+    /run/systemd/resolve/resolv.conf \
+    /run/NetworkManager/no-stub-resolv.conf \
+    /etc/resolv.conf
+  do
+    if [[ -r "$candidate" ]] &&
+      awk '$1 == "nameserver" && $2 !~ /^(127\.|::1$)/ { found = 1 } END { exit !found }' \
+        "$candidate"; then
+      resolver_source="$candidate"
+      break
+    fi
+  done
+
+  [[ -n "$resolver_source" ]] ||
+    die "No non-loopback DNS server found. Set DNS_SERVERS='1.1.1.1 8.8.8.8'."
+
+  cp -L "$resolver_source" "$ROOT_MOUNT/etc/resolv.conf"
 }
 
 run_in_target() {
@@ -131,6 +164,7 @@ reexec_as_root() {
         exec sudo --preserve-env env PATH="$PATH" OUTPUT_DIR="$OUTPUT_DIR" \
           WORK_DIR="$WORK_DIR" SOURCE_IMAGE="$SOURCE_IMAGE" IMAGE_NAME="$IMAGE_NAME" \
           OMV_ADMIN_USER="$OMV_ADMIN_USER" OMV_REPOSITORY="$OMV_REPOSITORY" \
+          DNS_SERVERS="$DNS_SERVERS" \
           "$SCRIPT_PATH" "$@"
         ;;
     esac
@@ -140,6 +174,7 @@ reexec_as_root() {
     exec doas env PATH="$PATH" OUTPUT_DIR="$OUTPUT_DIR" WORK_DIR="$WORK_DIR" \
       SOURCE_IMAGE="$SOURCE_IMAGE" IMAGE_NAME="$IMAGE_NAME" \
       OMV_ADMIN_USER="$OMV_ADMIN_USER" OMV_REPOSITORY="$OMV_REPOSITORY" \
+      DNS_SERVERS="$DNS_SERVERS" \
       "$SCRIPT_PATH" "$@"
   fi
 
@@ -147,6 +182,7 @@ reexec_as_root() {
     exec pkexec env PATH="$PATH" OUTPUT_DIR="$OUTPUT_DIR" WORK_DIR="$WORK_DIR" \
       SOURCE_IMAGE="$SOURCE_IMAGE" IMAGE_NAME="$IMAGE_NAME" \
       OMV_ADMIN_USER="$OMV_ADMIN_USER" OMV_REPOSITORY="$OMV_REPOSITORY" \
+      DNS_SERVERS="$DNS_SERVERS" \
       "$SCRIPT_PATH" "$@"
   fi
 
@@ -165,6 +201,7 @@ fi
 for tool in \
   chroot \
   cp \
+  curl \
   losetup \
   mount \
   mountpoint \
@@ -233,8 +270,7 @@ mount -t sysfs sysfs "$ROOT_MOUNT/sys"
 # package installation.
 mount -t tmpfs -o mode=0755,nosuid,nodev tmpfs "$ROOT_MOUNT/run"
 
-rm -f "$ROOT_MOUNT/etc/resolv.conf"
-cp -L /etc/resolv.conf "$ROOT_MOUNT/etc/resolv.conf"
+configure_target_resolver
 
 # QEMU/binfmt needs the target dynamic loader at the ELF interpreter path.
 if [[ ! -e "$ROOT_MOUNT/lib/ld-linux-aarch64.so.1" ]] &&
@@ -283,12 +319,28 @@ EOF
 chmod 0755 "$ROOT_MOUNT/usr/sbin/policy-rc.d"
 
 run_in_target apt-get update
-run_in_target apt-get install --yes systemd-resolved psmisc gnupg wget
+run_in_target apt-get install --yes systemd-resolved psmisc gnupg
+# systemd-resolved replaces resolv.conf with a /run-based stub. Services are
+# deliberately not started in the build chroot, so restore an upstream file
+# before apt needs DNS again.
+configure_target_resolver
 
-run_in_target sh -c \
-  "wget -qO- '$OMV_REPOSITORY/archive.key' |
-    gpg --dearmor --yes \
-      -o /usr/share/keyrings/openmediavault-archive-keyring.gpg"
+# Fetch outside the ARM chroot. A private target /run intentionally prevents
+# host NSS leakage, but that can also make host-managed DNS unavailable there.
+# Keeping the HTTP request on the host gives useful curl errors instead of a
+# misleading "no valid OpenPGP data" error from a failed pipeline.
+curl --fail --location --retry 3 --silent --show-error \
+  "$OMV_REPOSITORY/archive.key" \
+  --output "$ROOT_MOUNT/tmp/openmediavault-archive.key"
+
+run_in_target gpg --batch --show-keys /tmp/openmediavault-archive.key >/dev/null
+run_in_target gpg \
+  --batch \
+  --dearmor \
+  --yes \
+  --output /usr/share/keyrings/openmediavault-archive-keyring.gpg \
+  /tmp/openmediavault-archive.key
+rm -f "$ROOT_MOUNT/tmp/openmediavault-archive.key"
 
 cat > "$ROOT_MOUNT/etc/apt/sources.list.d/openmediavault.list" <<EOF
 deb [signed-by=/usr/share/keyrings/openmediavault-archive-keyring.gpg] $OMV_REPOSITORY sandworm main
