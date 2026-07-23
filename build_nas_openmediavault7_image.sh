@@ -47,13 +47,17 @@ run_in_target() {
 }
 
 ensure_target_group() {
-  if ! run_in_target getent group "$1" >/dev/null; then
+  if ! awk -F: -v group_name="$1" \
+    '$1 == group_name { found = 1 } END { exit !found }' \
+    "$ROOT_MOUNT/etc/group"; then
     run_in_target groupadd --system "$1"
   fi
 }
 
 ensure_target_user() {
-  if ! run_in_target id "$1" >/dev/null 2>&1; then
+  if ! awk -F: -v user_name="$1" \
+    '$1 == user_name { found = 1 } END { exit !found }' \
+    "$ROOT_MOUNT/etc/passwd"; then
     run_in_target useradd \
       --system \
       --no-create-home \
