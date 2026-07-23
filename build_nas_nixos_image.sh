@@ -156,6 +156,28 @@ export CM3588_SERIAL_CONSOLE="$SERIAL_CONSOLE"
 export CM3588_KERNEL_EXTRA_ARGS="$KERNEL_EXTRA_ARGS"
 
 RESULT_LINK="$WORK_DIR/nixos-image-result"
+read -r -d '' NIX_BUILD_EXPRESSION <<'EOF' || true
+let
+  project = builtins.getFlake ("path:" + builtins.getEnv "CM3588_PROJECT_DIR");
+in
+import (builtins.getEnv "CM3588_NIXOS_EXPRESSION") {
+  nixpkgs = project.inputs.nixpkgs;
+  kernelImage = builtins.getEnv "CM3588_KERNEL_IMAGE";
+  kernelModules = builtins.getEnv "CM3588_KERNEL_MODULES";
+  kernelConfig = builtins.getEnv "CM3588_KERNEL_CONFIG";
+  boardDtb = builtins.getEnv "CM3588_BOARD_DTB";
+  ubootImage = builtins.getEnv "CM3588_UBOOT_IMAGE";
+  kernelRelease = builtins.getEnv "CM3588_KERNEL_RELEASE";
+  imageBaseName = builtins.getEnv "CM3588_IMAGE_BASENAME";
+  hostName = builtins.getEnv "CM3588_HOSTNAME";
+  defaultUser = builtins.getEnv "CM3588_DEFAULT_USER";
+  initialPassword = builtins.getEnv "CM3588_INITIAL_PASSWORD";
+  authorizedKeysFile = builtins.getEnv "CM3588_AUTHORIZED_KEYS_FILE";
+  timeZone = builtins.getEnv "CM3588_TIMEZONE";
+  serialConsole = builtins.getEnv "CM3588_SERIAL_CONSOLE";
+  kernelExtraArgs = builtins.getEnv "CM3588_KERNEL_EXTRA_ARGS";
+}
+EOF
 
 log "Building the NixOS ARM64 system and SD-card image"
 
@@ -163,28 +185,7 @@ nix build \
   --impure \
   --print-build-logs \
   --out-link "$RESULT_LINK" \
-  --expr '
-    let
-      project = builtins.getFlake ("path:" + builtins.getEnv "CM3588_PROJECT_DIR");
-    in
-    import (builtins.getEnv "CM3588_NIXOS_EXPRESSION") {
-      nixpkgs = project.inputs.nixpkgs;
-      kernelImage = builtins.getEnv "CM3588_KERNEL_IMAGE";
-      kernelModules = builtins.getEnv "CM3588_KERNEL_MODULES";
-      kernelConfig = builtins.getEnv "CM3588_KERNEL_CONFIG";
-      boardDtb = builtins.getEnv "CM3588_BOARD_DTB";
-      ubootImage = builtins.getEnv "CM3588_UBOOT_IMAGE";
-      kernelRelease = builtins.getEnv "CM3588_KERNEL_RELEASE";
-      imageBaseName = builtins.getEnv "CM3588_IMAGE_BASENAME";
-      hostName = builtins.getEnv "CM3588_HOSTNAME";
-      defaultUser = builtins.getEnv "CM3588_DEFAULT_USER";
-      initialPassword = builtins.getEnv "CM3588_INITIAL_PASSWORD";
-      authorizedKeysFile = builtins.getEnv "CM3588_AUTHORIZED_KEYS_FILE";
-      timeZone = builtins.getEnv "CM3588_TIMEZONE";
-      serialConsole = builtins.getEnv "CM3588_SERIAL_CONSOLE";
-      kernelExtraArgs = builtins.getEnv "CM3588_KERNEL_EXTRA_ARGS";
-    }
-  '
+  --expr "$NIX_BUILD_EXPRESSION"
 
 BUILT_IMAGE="$RESULT_LINK/sd-image/$IMAGE_BASENAME.img.zst"
 require_file "$BUILT_IMAGE"
