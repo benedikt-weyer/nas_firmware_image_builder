@@ -81,7 +81,16 @@ udevadm trigger --subsystem-match=block --action=change
 udevadm settle
 
 log "Checking and growing the eMMC root filesystem"
+set +e
 e2fsck -f -y "$TARGET_ROOT_PARTITION"
+e2fsck_status=$?
+set -e
+
+case "$e2fsck_status" in
+  0|1) ;;
+  *) die "e2fsck failed for $TARGET_ROOT_PARTITION (exit status $e2fsck_status)" ;;
+esac
+
 resize2fs "$TARGET_ROOT_PARTITION"
 sync
 
