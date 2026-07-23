@@ -46,6 +46,23 @@ run_in_target() {
     "$@"
 }
 
+ensure_target_group() {
+  if ! run_in_target getent group "$1" >/dev/null; then
+    run_in_target groupadd --system "$1"
+  fi
+}
+
+ensure_target_user() {
+  if ! run_in_target id "$1" >/dev/null 2>&1; then
+    run_in_target useradd \
+      --system \
+      --no-create-home \
+      --gid "$1" \
+      --shell /usr/sbin/nologin \
+      "$1"
+  fi
+}
+
 unmount_image() {
   set +e
 
@@ -53,12 +70,12 @@ unmount_image() {
 
   for mount_path in run sys proc dev/pts dev; do
     if mountpoint -q "$ROOT_MOUNT/$mount_path"; then
-      umount -R "$ROOT_MOUNT/$mount_path"
+      umount -R -l "$ROOT_MOUNT/$mount_path"
     fi
   done
 
   if mountpoint -q "$ROOT_MOUNT"; then
-    umount "$ROOT_MOUNT"
+    umount -l "$ROOT_MOUNT"
   fi
 
   if [[ -n "$LOOP_DEVICE" ]]; then
@@ -156,6 +173,10 @@ udevadm settle
 [[ -b "$LOOP_DEVICE"p2 ]] ||
   die "Root partition did not appear: $LOOP_DEVICE"p2
 
+if mountpoint -q "$ROOT_MOUNT"; then
+  umount -R -l "$ROOT_MOUNT"
+fi
+
 rm -rf "$ROOT_MOUNT"
 mkdir -p "$ROOT_MOUNT"
 mount "$LOOP_DEVICE"p2 "$ROOT_MOUNT"
@@ -171,6 +192,7 @@ mount --bind /dev/pts "$ROOT_MOUNT/dev/pts"
 mount -t proc proc "$ROOT_MOUNT/proc"
 mount -t sysfs sysfs "$ROOT_MOUNT/sys"
 mount --bind /run "$ROOT_MOUNT/run"
+mount --make-rslave "$ROOT_MOUNT/run"
 
 rm -f "$ROOT_MOUNT/etc/resolv.conf"
 cp -L /etc/resolv.conf "$ROOT_MOUNT/etc/resolv.conf"
@@ -199,6 +221,21 @@ fi
 ###############################################################################
 
 log "Installing OpenMediaVault 7"
+
+for group in \
+  staff \
+  ssl-cert \
+  statd \
+  www-data \
+  sambashare \
+  postfix \
+  postdrop \
+  chrony
+do
+  ensure_target_group "$group"
+done
+
+ensure_target_user www-data
 
 cat > "$ROOT_MOUNT/usr/sbin/policy-rc.d" <<'EOF'
 #!/bin/sh
