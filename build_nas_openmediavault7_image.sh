@@ -305,12 +305,15 @@ for group in \
   sambashare \
   postfix \
   postdrop \
-  chrony
+  _chrony \
+  avahi
 do
   ensure_target_group "$group"
 done
 
 ensure_target_user www-data
+ensure_target_user _chrony
+ensure_target_user avahi
 
 cat > "$ROOT_MOUNT/usr/sbin/policy-rc.d" <<'EOF'
 #!/bin/sh
