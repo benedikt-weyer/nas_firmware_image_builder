@@ -207,7 +207,6 @@ for tool in \
   mountpoint \
   partprobe \
   sha256sum \
-  systemctl \
   udevadm \
   umount \
   zstd
@@ -322,7 +321,7 @@ EOF
 chmod 0755 "$ROOT_MOUNT/usr/sbin/policy-rc.d"
 
 run_in_target apt-get update
-run_in_target apt-get install --yes systemd-resolved psmisc gnupg
+run_in_target apt-get install --yes systemd-resolved psmisc gnupg lsb-base
 # systemd-resolved replaces resolv.conf with a /run-based stub. Services are
 # deliberately not started in the build chroot, so restore an upstream file
 # before apt needs DNS again.
@@ -373,7 +372,6 @@ run_in_target id "$OMV_ADMIN_USER" >/dev/null ||
 run_in_target usermod -aG _ssh "$OMV_ADMIN_USER"
 
 rm -f "$ROOT_MOUNT/usr/sbin/policy-rc.d"
-systemctl --root="$ROOT_MOUNT" enable systemd-resolved.service
 
 ###############################################################################
 # Clean, compress, and checksum
