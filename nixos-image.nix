@@ -160,6 +160,7 @@ let
           # The storage and ext4 drivers needed for the SD root are built in.
           # Avoid pulling unrelated generic hardware modules into the initrd.
           hardware.enableAllHardware = lib.mkForce false;
+          hardware.enableRedistributableFirmware = true;
           boot.initrd.includeDefaultModules = false;
           boot.initrd.availableKernelModules = lib.mkForce [ ];
           boot.initrd.kernelModules = lib.mkForce [ ];
