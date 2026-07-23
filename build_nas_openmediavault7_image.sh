@@ -13,6 +13,7 @@ WORK_DIR="${WORK_DIR:-$SCRIPT_DIR/work-openmediavault7}"
 SOURCE_IMAGE="${SOURCE_IMAGE:-$OUTPUT_DIR/cm3588-nas-debian-bookworm.img}"
 IMAGE_NAME="${IMAGE_NAME:-cm3588-nas-openmediavault7.img}"
 IMAGE_PATH="$OUTPUT_DIR/$IMAGE_NAME"
+LOG_FILE="${LOG_FILE:-$OUTPUT_DIR/$IMAGE_NAME.log}"
 
 OMV_ADMIN_USER="${OMV_ADMIN_USER:-nas}"
 OMV_REPOSITORY="${OMV_REPOSITORY:-https://packages.openmediavault.org/public}"
@@ -34,6 +35,13 @@ die() {
 require_tool() {
   command -v "$1" >/dev/null 2>&1 ||
     die "Missing required tool: $1"
+}
+
+setup_stdout_log() {
+  command -v tee >/dev/null 2>&1 || die "Missing required tool: tee"
+  mkdir -p "$(dirname -- "$LOG_FILE")"
+  exec > >(tee "$LOG_FILE")
+  printf 'Build log: %s\n' "$LOG_FILE"
 }
 
 configure_target_resolver() {
@@ -163,6 +171,7 @@ reexec_as_root() {
       *)
         exec sudo --preserve-env env PATH="$PATH" OUTPUT_DIR="$OUTPUT_DIR" \
           WORK_DIR="$WORK_DIR" SOURCE_IMAGE="$SOURCE_IMAGE" IMAGE_NAME="$IMAGE_NAME" \
+          LOG_FILE="$LOG_FILE" \
           OMV_ADMIN_USER="$OMV_ADMIN_USER" OMV_REPOSITORY="$OMV_REPOSITORY" \
           DNS_SERVERS="$DNS_SERVERS" \
           "$SCRIPT_PATH" "$@"
@@ -173,6 +182,7 @@ reexec_as_root() {
   if command -v doas >/dev/null 2>&1; then
     exec doas env PATH="$PATH" OUTPUT_DIR="$OUTPUT_DIR" WORK_DIR="$WORK_DIR" \
       SOURCE_IMAGE="$SOURCE_IMAGE" IMAGE_NAME="$IMAGE_NAME" \
+      LOG_FILE="$LOG_FILE" \
       OMV_ADMIN_USER="$OMV_ADMIN_USER" OMV_REPOSITORY="$OMV_REPOSITORY" \
       DNS_SERVERS="$DNS_SERVERS" \
       "$SCRIPT_PATH" "$@"
@@ -181,6 +191,7 @@ reexec_as_root() {
   if command -v pkexec >/dev/null 2>&1; then
     exec pkexec env PATH="$PATH" OUTPUT_DIR="$OUTPUT_DIR" WORK_DIR="$WORK_DIR" \
       SOURCE_IMAGE="$SOURCE_IMAGE" IMAGE_NAME="$IMAGE_NAME" \
+      LOG_FILE="$LOG_FILE" \
       OMV_ADMIN_USER="$OMV_ADMIN_USER" OMV_REPOSITORY="$OMV_REPOSITORY" \
       DNS_SERVERS="$DNS_SERVERS" \
       "$SCRIPT_PATH" "$@"
@@ -193,6 +204,8 @@ if [[ "$EUID" -ne 0 ]]; then
   log "Requesting root privileges"
   reexec_as_root "$@"
 fi
+
+setup_stdout_log
 
 ###############################################################################
 # Validation and source-image copy

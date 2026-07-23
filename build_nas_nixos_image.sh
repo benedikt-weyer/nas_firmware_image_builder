@@ -18,6 +18,7 @@ WORK_DIR="${WORK_DIR:-$PROJECT_DIR/work-nixos}"
 
 IMAGE_NAME="${IMAGE_NAME:-cm3588-nas-nixos.img.zst}"
 IMAGE_BASENAME="${IMAGE_NAME%.img.zst}"
+LOG_FILE="${LOG_FILE:-$OUTPUT_DIR/$IMAGE_NAME.log}"
 
 UBOOT_IMAGE="${UBOOT_IMAGE:-$UBOOT_OUTPUT_DIR/u-boot-rockchip.bin}"
 KERNEL_IMAGE="${KERNEL_IMAGE:-$KERNEL_OUTPUT_DIR/boot/Image}"
@@ -54,9 +55,18 @@ require_file() {
   [[ -f "$1" ]] || die "Required file not found: $1"
 }
 
+setup_stdout_log() {
+  command -v tee >/dev/null 2>&1 || die "Missing required tool: tee"
+  mkdir -p "$(dirname -- "$LOG_FILE")"
+  exec > >(tee "$LOG_FILE")
+  printf 'Build log: %s\n' "$LOG_FILE"
+}
+
 show_setting() {
   printf '  %-22s %s\n' "$1" "$2"
 }
+
+setup_stdout_log
 
 for tool in nix find sort sed tar sha256sum stat cp mkdir; do
   require_tool "$tool"

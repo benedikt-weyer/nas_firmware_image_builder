@@ -40,6 +40,7 @@ WORK_DIR="${WORK_DIR:-$SCRIPT_DIR/work}"
 
 IMAGE_NAME="${IMAGE_NAME:-cm3588-nas-debian-bookworm.img}"
 IMAGE_PATH="$OUTPUT_DIR/$IMAGE_NAME"
+LOG_FILE="${LOG_FILE:-$OUTPUT_DIR/$IMAGE_NAME.log}"
 
 UBOOT_IMAGE="${UBOOT_IMAGE:-$UBOOT_OUTPUT_DIR/u-boot-rockchip.bin}"
 KERNEL_IMAGE="${KERNEL_IMAGE:-$KERNEL_OUTPUT_DIR/boot/Image}"
@@ -117,6 +118,13 @@ require_tool() {
 require_file() {
   [[ -f "$1" ]] ||
     die "Required file not found: $1"
+}
+
+setup_stdout_log() {
+  command -v tee >/dev/null 2>&1 || die "Missing required tool: tee"
+  mkdir -p "$(dirname -- "$LOG_FILE")"
+  exec > >(tee "$LOG_FILE")
+  printf 'Build log: %s\n' "$LOG_FILE"
 }
 
 run_in_target() {
@@ -230,6 +238,7 @@ reexec_as_root() {
     "OUTPUT_DIR=$OUTPUT_DIR"
     "WORK_DIR=$WORK_DIR"
     "IMAGE_NAME=$IMAGE_NAME"
+    "LOG_FILE=$LOG_FILE"
     "UBOOT_IMAGE=$UBOOT_IMAGE"
     "KERNEL_IMAGE=$KERNEL_IMAGE"
     "DTB_IMAGE=$DTB_IMAGE"
@@ -274,6 +283,8 @@ if [[ "$EUID" -ne 0 ]]; then
   log "Requesting root privileges"
   reexec_as_root "$@"
 fi
+
+setup_stdout_log
 
 ###############################################################################
 # Tool and input validation
