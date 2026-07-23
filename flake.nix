@@ -21,10 +21,13 @@
           pkgs = import nixpkgs {
             inherit system;
           };
+          crossPkgs = pkgs.pkgsCross.aarch64-multiplatform;
         in
         {
           default = pkgs.mkShell {
             name = "cm3588-image-builder";
+
+            CROSS_COMPILE = crossPkgs.stdenv.cc.targetPrefix;
 
             packages = with pkgs; [
               # Core shell utilities
@@ -64,6 +67,18 @@
               # Network and certificates
               curl
               cacert
+
+              # AArch64 firmware builds
+              crossPkgs.stdenv.cc
+              pkgs.bison
+              pkgs.flex
+              pkgs.bc
+              pkgs.dtc
+              pkgs.pkg-config
+              pkgs.python3Packages.setuptools
+              pkgs.python3Packages.pyelftools
+              pkgs.swig
+              pkgs.gnutls.dev
             ];
 
             shellHook = ''

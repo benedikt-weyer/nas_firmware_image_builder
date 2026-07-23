@@ -10,6 +10,7 @@ OUTPUT_DIR="${OUTPUT_DIR:-$ROOT_DIR/output}"
 
 UBOOT_DEFCONFIG="${UBOOT_DEFCONFIG:-cm3588-nas-rk3588_defconfig}"
 JOBS="${JOBS:-$(nproc)}"
+BUILD_TFA="${BUILD_TFA:-0}"
 
 ###############################################################################
 # Helpers
@@ -86,7 +87,10 @@ done
 
 require_directory "$RKBIN_DIR"
 require_directory "$UBOOT_DIR"
-require_directory "$TFA_DIR"
+
+if [[ "$BUILD_TFA" == "1" ]]; then
+  require_directory "$TFA_DIR"
+fi
 
 mkdir -p "$OUTPUT_DIR"
 
@@ -132,30 +136,38 @@ require_file "$ROCKCHIP_TPL"
 printf 'DDR firmware:\n  %s\n' "$ROCKCHIP_TPL"
 
 ###############################################################################
-# Build Trusted Firmware-A BL31
+# Select Trusted Firmware-A BL31
 ###############################################################################
 
-log "Building Trusted Firmware-A BL31"
+if [[ -n "${BL31:-}" ]]; then
+  log "Using supplied BL31"
+elif [[ "$BUILD_TFA" == "1" ]]; then
+  log "Building Trusted Firmware-A BL31"
 
-rm -rf "$TFA_DIR/build/rk3588"
+  rm -rf "$TFA_DIR/build/rk3588"
 
-make -C "$TFA_DIR" \
-  CROSS_COMPILE="$CROSS_COMPILE" \
-  CC="$CROSS_GCC" \
-  CPP="$CROSS_CPP" \
-  AS="$CROSS_GCC" \
-  AR="$CROSS_AR" \
-  LD="$CROSS_LD" \
-  NM="$CROSS_NM" \
-  OC="$CROSS_OBJCOPY" \
-  OD="$CROSS_OBJDUMP" \
-  READELF="$CROSS_READELF" \
-  PLAT=rk3588 \
-  DEBUG=0 \
-  bl31 \
-  -j"$JOBS"
+  make -C "$TFA_DIR" \
+    CROSS_COMPILE="$CROSS_COMPILE" \
+    CC="$CROSS_GCC" \
+    CPP="$CROSS_CPP" \
+    AS="$CROSS_GCC" \
+    AR="$CROSS_AR" \
+    LD="$CROSS_LD" \
+    NM="$CROSS_NM" \
+    OC="$CROSS_OBJCOPY" \
+    OD="$CROSS_OBJDUMP" \
+    READELF="$CROSS_READELF" \
+    PLAT=rk3588 \
+    DEBUG=0 \
+    bl31 \
+    -j"$JOBS"
 
-BL31="$TFA_DIR/build/rk3588/release/bl31/bl31.elf"
+  BL31="$TFA_DIR/build/rk3588/release/bl31/bl31.elf"
+else
+  log "Using Rockchip RK3588 BL31"
+  BL31="$RKBIN_DIR/bin/rk35/rk3588_bl31_v1.54.elf"
+fi
+
 BL31="$(realpath "$BL31")"
 
 require_file "$BL31"
