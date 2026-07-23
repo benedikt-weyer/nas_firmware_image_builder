@@ -251,6 +251,12 @@ log "Applying CM3588 NAS-oriented kernel options"
   --enable TUN \
   --enable VETH \
   --enable NF_TABLES \
+  --enable NF_TABLES_INET \
+  --module NFT_CT \
+  --module NFT_FIB_IPV4 \
+  --module NFT_FIB_IPV6 \
+  --module NFT_FIB_INET \
+  --module NFT_REJECT \
   --enable NETFILTER \
   --enable SECURITY \
   --enable SECURITY_APPARMOR \
