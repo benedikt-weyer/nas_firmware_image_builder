@@ -177,6 +177,7 @@ let
           networking = {
             inherit hostName;
             useDHCP = true;
+            nftables.enable = true;
           };
 
           services.openssh = {
