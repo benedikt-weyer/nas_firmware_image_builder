@@ -238,6 +238,24 @@ let
             '';
           };
 
+          # The upstream SD image service only runs while its transient Nix
+          # registration file exists. Keep an explicit completion marker so
+          # CM3588 images grow their final root partition exactly once.
+          systemd.services.expand-root-partition = {
+            unitConfig.ConditionPathExists = lib.mkForce "!/var/lib/cm3588-root-expanded";
+
+            script = lib.mkForce ''
+              rootPart=$(${lib.getExe' pkgs.util-linux "findmnt"} -n -o SOURCE /)
+              bootDevice=$(${lib.getExe' pkgs.util-linux "lsblk"} -npo PKNAME "$rootPart")
+              partNum=$(${lib.getExe' pkgs.util-linux "lsblk"} -npo MAJ:MIN "$rootPart" | ${lib.getExe pkgs.gawk} -F: '{print $2}')
+
+              echo ",+," | ${lib.getExe' pkgs.util-linux "sfdisk"} -N"$partNum" --no-reread "$bootDevice"
+              ${lib.getExe' pkgs.parted "partprobe"} "$bootDevice"
+              ${lib.getExe' pkgs.e2fsprogs "resize2fs"} "$rootPart"
+              touch /var/lib/cm3588-root-expanded
+            '';
+          };
+
           system.stateVersion = "26.05";
         }
       )
