@@ -169,7 +169,7 @@ cleanup() {
 }
 trap cleanup EXIT
 
-for tool in blkid blockdev dd e2fsck findmnt lsblk partprobe resize2fs sed sfdisk sync udevadm zstd; do
+for tool in blkid blockdev dd e2fsck findmnt lsblk partprobe partx resize2fs sed sleep sfdisk sync udevadm zstd; do
   command -v "$tool" >/dev/null 2>&1 || {
     printf 'Missing remote tool: %s\n' "$tool" >&2
     exit 1
@@ -215,19 +215,28 @@ zstd --decompress --stdout "$image_path" |
 sync
 blockdev --flushbufs "$target_device"
 partprobe "$target_device"
+partx -u "$target_device" || true
+udevadm trigger --subsystem-match=block --action=change
 udevadm settle
+
+for _ in {1..10}; do
+  [[ -b "$target_root" ]] && break
+  sleep 1
+done
 
 [[ -b "$target_root" ]] || {
   printf 'Expected root partition was not found: %s\n' "$target_root" >&2
   exit 1
 }
-[[ "$(blkid -o value -s TYPE "$target_root")" == "ext4" ]] || {
+[[ "$(blkid -p -o value -s TYPE "$target_root")" == "ext4" ]] || {
   printf 'Expected an ext4 root filesystem on %s\n' "$target_root" >&2
   exit 1
 }
 
 echo ',+,' | sfdisk -N2 "$target_device"
 partprobe "$target_device"
+partx -u "$target_device" || true
+udevadm trigger --subsystem-match=block --action=change
 udevadm settle
 e2fsck -f -y "$target_root"
 resize2fs "$target_root"

@@ -25,7 +25,7 @@ if (( EUID != 0 )); then
   exec sudo --preserve-env "$0" "$@"
 fi
 
-for tool in blkid blockdev dd e2fsck findmnt lsblk partprobe resize2fs sfdisk sync udevadm; do
+for tool in blkid blockdev dd e2fsck findmnt lsblk partprobe partx resize2fs sfdisk sleep sync udevadm; do
   require_tool "$tool"
 done
 
@@ -61,14 +61,23 @@ sync
 
 log "Refreshing the eMMC partition table"
 partprobe "$TARGET_DISK"
+partx -u "$TARGET_DISK" || true
+udevadm trigger --subsystem-match=block --action=change
 udevadm settle
 
+for _ in {1..10}; do
+  [[ -b "$TARGET_ROOT_PARTITION" ]] && break
+  sleep 1
+done
+
 [[ -b "$TARGET_ROOT_PARTITION" ]] || die "Expected cloned root partition $TARGET_ROOT_PARTITION was not found"
-[[ "$(blkid -o value -s TYPE "$TARGET_ROOT_PARTITION")" == "ext4" ]] || die "Expected an ext4 root filesystem on $TARGET_ROOT_PARTITION"
+[[ "$(blkid -p -o value -s TYPE "$TARGET_ROOT_PARTITION")" == "ext4" ]] || die "Expected an ext4 root filesystem on $TARGET_ROOT_PARTITION"
 
 log "Expanding the eMMC root partition"
 echo ',+,' | sfdisk -N2 "$TARGET_DISK"
 partprobe "$TARGET_DISK"
+partx -u "$TARGET_DISK" || true
+udevadm trigger --subsystem-match=block --action=change
 udevadm settle
 
 log "Checking and growing the eMMC root filesystem"
