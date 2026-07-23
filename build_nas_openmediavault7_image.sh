@@ -40,6 +40,9 @@ run_in_target() {
     PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
     HOME=/root \
     DEBIAN_FRONTEND=noninteractive \
+    DEBCONF_NONINTERACTIVE_SEEN=true \
+    UCF_FORCE_CONFFOLD=1 \
+    NEEDRESTART_MODE=a \
     "$@"
 }
 
